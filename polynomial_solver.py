@@ -39,7 +39,7 @@ def plot_polynomial(poly):
     plt.ylabel("P(x)")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    return plt
 
 
 def main():
@@ -85,7 +85,8 @@ def main():
         print(f"Expanded form: {expanded}")
 
     elif option == "plot":
-        plot_polynomial(poly)
+        plot = plot_polynomial(poly)
+        plot.show()
 
     elif option == "help":
         show_help()

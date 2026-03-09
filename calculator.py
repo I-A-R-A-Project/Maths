@@ -1,6 +1,4 @@
-import math
-import re
-import sys
+import math, re, sys
 from datetime import datetime
 
 functions = {

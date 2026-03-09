@@ -1,5 +1,4 @@
-import sys
-import math
+import sys, math
 from calculator import solve_expression
 from datetime import datetime
 
@@ -47,7 +46,6 @@ def area(shape, *args):
         print(steps)
         return result
 
-
 def perimeter(shape, *args):
     result = None
     steps = ""
@@ -77,7 +75,6 @@ def perimeter(shape, *args):
         log_history("perimeter", shape, steps)
         print(steps)
         return result
-
 
 def volume(shape, *args):
     result = None
@@ -148,18 +145,18 @@ def parse_args():
 
     if command == "help":
         print("""
-Usage: python geometry_calculator.py [operation] [shape] [values...]
+            Usage: python geometry.py [operation] [shape] [values...]
 
-Operations:
-  area         Calculate area of a shape
-  perimeter    Calculate perimeter of a shape
-  volume       Calculate volume of a 3D shape
+            Operations:
+            area         Calculate area of a shape
+            perimeter    Calculate perimeter of a shape
+            volume       Calculate volume of a 3D shape
 
-Examples:
-  python geometry_calculator.py area circle 5
-  python geometry_calculator.py perimeter triangle 3 4 5
-  python geometry_calculator.py volume icosahedron 2
-""")
+            Examples:
+            python geometry.py area circle 5
+            python geometry.py perimeter triangle 3 4 5
+            python geometry.py volume icosahedron 2
+        """)
         return
 
     if len(sys.argv) < 4:
