@@ -2,12 +2,20 @@
 import unicodedata
 from typing import Callable
 
-from sympy import Eq, simplify, solve
+from sympy import Eq, solve
 from sympy.parsing.sympy_parser import parse_expr
 
 import geometria
 import physics
 from calculator import solve_expression
+from polynomial_solver import (
+    parse_polynomial_input,
+    polynomial_derivative,
+    polynomial_evaluate,
+    polynomial_expand,
+    polynomial_factor,
+    solve_roots_step_by_step,
+)
 
 EXIT_WORDS = {"exit", "quit", "salir"}
 HELP_WORDS = {"help", "ayuda", "?"}
@@ -49,6 +57,7 @@ Comandos aceptados (texto libre o formato directo):
 
 5) Polinomios:
    - raices de x^2 - 5*x + 6
+   - pasos para x^2 - 5*x + 6
    - derivada de x^3 - 2*x
    - factorizar x^2 - 9
    - evaluar x^2 + 1 en 3
@@ -184,14 +193,34 @@ def solve_physics(normalized_text: str, raw_text: str) -> bool:
 
 def extract_polynomial_expression(raw_text: str) -> str | None:
     candidates = re.findall(r"[0-9xX\+\-\*/\^\(\)\.\s]+", raw_text)
-    candidates = [item.strip() for item in candidates if "x" in item.lower()]
+    candidates = [item.strip() for item in candidates if re.search(r"[a-zA-Z]", item)]
     if not candidates:
         return None
     return max(candidates, key=len).replace("^", "**")
 
 
+def extract_polynomial_variable(normalized_text: str) -> str:
+    match = re.search(r"\b(en|para|respecto a)\s+([a-z])\b", normalized_text)
+    if match:
+        return match.group(2)
+    return "x"
+
+
 def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
-    poly_keywords = ["polinom", "raiz", "raices", "roots", "deriv", "factor", "expand", "evaluar", "eval"]
+    poly_keywords = [
+        "polinom",
+        "raiz",
+        "raices",
+        "roots",
+        "paso",
+        "pasos",
+        "steps",
+        "deriv",
+        "factor",
+        "expand",
+        "evaluar",
+        "eval",
+    ]
     if not any(keyword in normalized_text for keyword in poly_keywords):
         return False
 
@@ -200,28 +229,23 @@ def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
         print("No pude detectar el polinomio. Ejemplo: raices de x^2 - 5*x + 6")
         return True
 
-    poly = simplify(expression)
-    x_symbol = next(iter(poly.free_symbols), None)
-    if x_symbol is None:
-        print(f"No hay variable en el polinomio: {poly}")
+    preferred_symbol = extract_polynomial_variable(normalized_text)
+    try:
+        poly, x_symbol = parse_polynomial_input(expression, preferred_symbol=preferred_symbol)
+    except ValueError as exc:
+        print(exc)
         return True
 
     if "deriv" in normalized_text:
-        from sympy import diff
-
-        print(f"Derivada: {diff(poly, x_symbol)}")
+        print(f"Derivada: {polynomial_derivative(poly, x_symbol)}")
         return True
 
     if "factor" in normalized_text:
-        from sympy import factor
-
-        print(f"Factorizado: {factor(poly)}")
+        print(f"Factorizado: {polynomial_factor(poly)}")
         return True
 
     if "expand" in normalized_text:
-        from sympy import expand
-
-        print(f"Expandido: {expand(poly)}")
+        print(f"Expandido: {polynomial_expand(poly)}")
         return True
 
     if "evaluar" in normalized_text or "eval" in normalized_text:
@@ -230,10 +254,12 @@ def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
             print("Indica un valor para evaluar. Ejemplo: evaluar x^2+1 en 3")
             return True
         value = numbers[-1]
-        print(f"P({value}) = {poly.subs(x_symbol, value)}")
+        print(f"P({value}) = {polynomial_evaluate(poly, x_symbol, value)}")
         return True
 
-    roots = solve(Eq(poly, 0), x_symbol)
+    steps, roots = solve_roots_step_by_step(poly, x_symbol)
+    for step in steps:
+        print(step)
     print(f"Raices: {roots}")
     return True
 

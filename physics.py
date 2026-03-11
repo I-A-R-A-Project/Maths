@@ -2,8 +2,9 @@ import sys
 from calculator import solve_expression
 
 def solve_and_show(expression, label):
+    print(f"{label}: {expression}")
     result = solve_expression(expression, log=True)
-    print(f"\n{label}: {expression} = {result}")
+    print(f"{label} {result}")
     return result
 
 def force(mass, acceleration):

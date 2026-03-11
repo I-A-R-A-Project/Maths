@@ -68,7 +68,7 @@ def simplify_expression(expr):
 
 def log_steps(steps):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    output = [f"🧮 Step-by-step solution:"]
+    output = []
     for i, step in enumerate(steps):
         output.append(("↓ " if i != 0 else "") + step)
     result = '\n'.join(output)
