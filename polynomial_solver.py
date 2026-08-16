@@ -1,4 +1,3 @@
-import re
 from sympy import Eq, Poly, diff, expand, factor, lambdify, simplify, solve, symbols
 from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
@@ -6,7 +5,13 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 import sys
-from calculator import safe_eval
+from common import (
+    analyze_notation,
+    format_expression,
+    format_symbol,
+    normalize_algebraic_notation,
+    reduce_numeric_subexpressions,
+)
 
 x = symbols('x')
 TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application,)
@@ -34,44 +39,9 @@ Examples:
 """)
 
 
-def reduce_numeric_subexpressions(expr: str) -> str:
-    expr = expr.replace("^", "**").replace("X", "x")
-    pattern = re.compile(r"\(([^()]+)\)")
-
-    while True:
-        changed = False
-
-        def replacer(match: re.Match) -> str:
-            nonlocal changed
-            inner = match.group(1)
-            if re.search(r"[a-zA-Z]", inner) or "x" in inner.lower():
-                return f"({inner})"
-            value = safe_eval(inner)
-            if value is None:
-                return f"({inner})"
-            changed = True
-            return str(value)
-
-        updated = re.sub(pattern, replacer, expr)
-        if not changed:
-            return updated
-        expr = updated
-
-
-def normalize_algebraic_notation(expr: str) -> str:
-    expr = expr.replace("·", "*").replace("−", "-").replace("–", "-")
-    expr = expr.replace("^", "**").replace("X", "x")
-    expr = re.sub(r"\s+", "", expr)
-
-    def replace_power(match: re.Match) -> str:
-        return f"{match.group(1)}**{match.group(2)}"
-
-    expr = re.sub(r"([a-zA-Z])(\d+)", replace_power, expr)
-    return expr
-
-
 def parse_polynomial_input(poly_input: str, preferred_symbol: str = "x"):
     try:
+        notation = analyze_notation(poly_input)
         normalized = normalize_algebraic_notation(poly_input)
         normalized = reduce_numeric_subexpressions(normalized)
         expr = parse_expr(normalized, transformations=TRANSFORMATIONS)
@@ -97,7 +67,7 @@ def parse_polynomial_input(poly_input: str, preferred_symbol: str = "x"):
     else:
         x_symbol = symbols[0]
 
-    return poly, x_symbol
+    return poly, x_symbol, notation
 
 
 def polynomial_derivative(poly, x_symbol):
@@ -116,14 +86,15 @@ def polynomial_evaluate(poly, x_symbol, value):
     return poly.subs(x_symbol, value)
 
 
-def solve_roots_step_by_step(poly, x_symbol):
+def solve_roots_step_by_step(poly, x_symbol, notation):
     steps: list[str] = []
     expanded = expand(poly)
-    steps.append(f"1) Polinomio: {expanded}")
+    steps.append(f"1) Polinomio: {format_expression(expanded, notation)}")
     extra_symbols = sorted(sym.name for sym in poly.free_symbols if sym != x_symbol)
     if extra_symbols:
+        formatted_symbols = [format_symbol(name, notation) for name in extra_symbols]
         steps.append(
-            "2) Variables tratadas como constantes: " + ", ".join(extra_symbols)
+            "2) Variables tratadas como constantes: " + ", ".join(formatted_symbols)
         )
 
     try:
@@ -140,13 +111,16 @@ def solve_roots_step_by_step(poly, x_symbol):
 
     factored = factor(expanded)
     if poly_obj.length() == 1 and degree > 0:
+        symbol_label = format_symbol(str(x_symbol), notation)
         steps.append(
-            f"{step_index + 1}) Monomio: raiz {x_symbol}=0 con multiplicidad {degree}."
+            f"{step_index + 1}) Monomio: raiz {symbol_label}=0 con multiplicidad {degree}."
         )
         return steps, [0]
 
     if factored != expanded:
-        steps.append(f"{step_index + 1}) Factorizar: {factored}")
+        steps.append(
+            f"{step_index + 1}) Factorizar: {format_expression(factored, notation)}"
+        )
     else:
         steps.append(f"{step_index + 1}) Factorizar: no se pudo factorizar en factores simples.")
 
@@ -157,9 +131,14 @@ def solve_roots_step_by_step(poly, x_symbol):
 
     if degree == 1:
         a, b = poly_obj.all_coeffs()
-        steps.append(f"{step_index + 2}) Forma lineal: {a}*{x_symbol} + {b} = 0")
+        symbol_label = format_symbol(str(x_symbol), notation)
+        linear_expr = a * x_symbol + b
+        steps.append(
+            f"{step_index + 2}) Forma lineal: "
+            f"{format_expression(linear_expr, notation)} = 0"
+        )
         root = -b / a
-        steps.append(f"{step_index + 3}) {x_symbol} = -b/a = {-b}/{a} = {root}")
+        steps.append(f"{step_index + 3}) {symbol_label} = -b/a = {-b}/{a} = {root}")
         return steps, [root]
 
     if degree == 2:
@@ -167,7 +146,8 @@ def solve_roots_step_by_step(poly, x_symbol):
         steps.append(f"{step_index + 2}) Coeficientes: a={a}, b={b}, c={c}")
         discriminant = b**2 - 4 * a * c
         steps.append(f"{step_index + 3}) Discriminante: Δ = b^2 - 4ac = {discriminant}")
-        steps.append(f"{step_index + 4}) Formula: {x_symbol} = (-b ± sqrt(Δ)) / (2a)")
+        symbol_label = format_symbol(str(x_symbol), notation)
+        steps.append(f"{step_index + 4}) Formula: {symbol_label} = (-b ± sqrt(Δ)) / (2a)")
         roots = solve(Eq(expanded, 0), x_symbol)
         return steps, roots
 
@@ -178,6 +158,11 @@ def solve_roots_step_by_step(poly, x_symbol):
 
     roots = solve(Eq(expanded, 0), x_symbol)
     return steps, roots
+
+
+def format_roots(roots, notation) -> str:
+    formatted = [format_expression(root, notation) for root in roots]
+    return f"[{', '.join(formatted)}]"
 
 
 def plot_polynomial(poly):
@@ -212,7 +197,9 @@ def main():
         preferred_symbol = "x"
         if option in {"roots", "steps"} and len(sys.argv) >= 4:
             preferred_symbol = sys.argv[3]
-        poly, x_symbol = parse_polynomial_input(poly_input, preferred_symbol=preferred_symbol)
+        poly, x_symbol, notation = parse_polynomial_input(
+            poly_input, preferred_symbol=preferred_symbol
+        )
     except ValueError as exc:
         print(exc)
         return
@@ -230,28 +217,28 @@ def main():
             print(f"Error evaluating: {e}")
 
     elif option == "roots":
-        steps, roots = solve_roots_step_by_step(poly, x_symbol)
+        steps, roots = solve_roots_step_by_step(poly, x_symbol, notation)
         for step in steps:
             print(step)
-        print(f"Roots: {roots}")
+        print(f"Roots: {format_roots(roots, notation)}")
 
     elif option == "steps":
-        steps, roots = solve_roots_step_by_step(poly, x_symbol)
+        steps, roots = solve_roots_step_by_step(poly, x_symbol, notation)
         for step in steps:
             print(step)
-        print(f"Roots: {roots}")
+        print(f"Roots: {format_roots(roots, notation)}")
 
     elif option == "derivative":
         deriv = polynomial_derivative(poly, x_symbol)
-        print(f"Derivative: {deriv}")
+        print(f"Derivative: {format_expression(deriv, notation)}")
 
     elif option == "factor":
         factored = polynomial_factor(poly)
-        print(f"Factored form: {factored}")
+        print(f"Factored form: {format_expression(factored, notation)}")
 
     elif option == "expand":
         expanded = polynomial_expand(poly)
-        print(f"Expanded form: {expanded}")
+        print(f"Expanded form: {format_expression(expanded, notation)}")
 
     elif option == "plot":
         plot = plot_polynomial(poly)

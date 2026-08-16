@@ -8,6 +8,7 @@ from sympy.parsing.sympy_parser import parse_expr
 import geometria
 import physics
 from calculator import solve_expression
+from common import analyze_notation, format_expression
 from polynomial_solver import (
     parse_polynomial_input,
     polynomial_derivative,
@@ -196,7 +197,7 @@ def extract_polynomial_expression(raw_text: str) -> str | None:
     candidates = [item.strip() for item in candidates if re.search(r"[a-zA-Z]", item)]
     if not candidates:
         return None
-    return max(candidates, key=len).replace("^", "**")
+    return max(candidates, key=len)
 
 
 def extract_polynomial_variable(normalized_text: str) -> str:
@@ -230,22 +231,28 @@ def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
         return True
 
     preferred_symbol = extract_polynomial_variable(normalized_text)
+    notation = analyze_notation(expression)
     try:
-        poly, x_symbol = parse_polynomial_input(expression, preferred_symbol=preferred_symbol)
+        poly, x_symbol, _notation = parse_polynomial_input(
+            expression, preferred_symbol=preferred_symbol
+        )
     except ValueError as exc:
         print(exc)
         return True
 
     if "deriv" in normalized_text:
-        print(f"Derivada: {polynomial_derivative(poly, x_symbol)}")
+        deriv = polynomial_derivative(poly, x_symbol)
+        print(f"Derivada: {format_expression(deriv, notation)}")
         return True
 
     if "factor" in normalized_text:
-        print(f"Factorizado: {polynomial_factor(poly)}")
+        factored = polynomial_factor(poly)
+        print(f"Factorizado: {format_expression(factored, notation)}")
         return True
 
     if "expand" in normalized_text:
-        print(f"Expandido: {polynomial_expand(poly)}")
+        expanded = polynomial_expand(poly)
+        print(f"Expandido: {format_expression(expanded, notation)}")
         return True
 
     if "evaluar" in normalized_text or "eval" in normalized_text:
@@ -257,10 +264,11 @@ def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
         print(f"P({value}) = {polynomial_evaluate(poly, x_symbol, value)}")
         return True
 
-    steps, roots = solve_roots_step_by_step(poly, x_symbol)
+    steps, roots = solve_roots_step_by_step(poly, x_symbol, notation)
     for step in steps:
         print(step)
-    print(f"Raices: {roots}")
+    formatted_roots = [format_expression(root, notation) for root in roots]
+    print(f"Raices: [{', '.join(formatted_roots)}]")
     return True
 
 

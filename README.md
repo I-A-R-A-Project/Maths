@@ -53,3 +53,11 @@ python polynomial_solver.py "x**2 - 5*x + 6" roots
 - Algunos modulos escriben historial en `history.txt`.
 - `polynomial_solver.py plot` abre ventana grafica local.
 - La consola `math_console.py` prioriza texto libre en espanol/ingles y usa heuristicas por palabras clave.
+
+## Recomendaciones
+
+- Agregar CI basico (GitHub Actions) que ejecute `python -m pytest tests`.
+- Unificar idioma y formato de mensajes (ES/EN y notacion matematica).
+- Incorporar un parser de PDF opcional para importar ejercicios automaticamente.
+- Agregar mas tests para el router de `math_console.py` y formatos mixtos de notacion.
+- Documentar ejemplos de notacion soportada (`x2`, `x^2`, `x**2`, multiplicacion implicita).
