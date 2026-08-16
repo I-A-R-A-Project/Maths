@@ -1,4 +1,8 @@
-import math, re, sys
+import ast
+import math
+import operator
+import re
+import sys
 from datetime import datetime
 
 functions = {
@@ -16,6 +20,71 @@ constants = {
     'e': math.e
 }
 
+# Unicamente estos nodos de AST son validos en una expresion aritmetica.
+# Cualquier otra cosa (atributos, subscripts, llamadas a nombres no
+# whitelisteados, comprensiones, strings, etc.) se rechaza antes de evaluar
+# una sola operacion. No hay eval() ni compile() de por medio en ningun punto.
+_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.Mod: operator.mod,
+}
+
+_UNARYOPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+
+class UnsafeExpressionError(ValueError):
+    """La expresion contiene algo fuera de la gramatica aritmetica permitida."""
+
+
+def _eval_node(node):
+    if isinstance(node, ast.Expression):
+        return _eval_node(node.body)
+
+    if isinstance(node, ast.Constant):
+        # Solo numeros. Nada de strings, bytes, None, etc.
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            raise UnsafeExpressionError(f"Valor no permitido: {node.value!r}")
+        return node.value
+
+    if isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type not in _BINOPS:
+            raise UnsafeExpressionError(f"Operador no permitido: {op_type.__name__}")
+        return _BINOPS[op_type](_eval_node(node.left), _eval_node(node.right))
+
+    if isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type not in _UNARYOPS:
+            raise UnsafeExpressionError(f"Operador unario no permitido: {op_type.__name__}")
+        return _UNARYOPS[op_type](_eval_node(node.operand))
+
+    if isinstance(node, ast.Name):
+        if node.id in constants:
+            return constants[node.id]
+        raise UnsafeExpressionError(f"Nombre no permitido: '{node.id}'")
+
+    if isinstance(node, ast.Call):
+        # func debe ser un nombre simple ya whitelisteado; nada de
+        # atributos (obj.metodo), ni llamadas indirectas.
+        if not isinstance(node.func, ast.Name) or node.func.id not in functions:
+            raise UnsafeExpressionError("Solo se permiten llamadas a funciones matematicas conocidas.")
+        if node.keywords:
+            raise UnsafeExpressionError("No se permiten argumentos con nombre.")
+        args = [_eval_node(arg) for arg in node.args]
+        return functions[node.func.id](*args)
+
+    # Cualquier otro tipo de nodo (Attribute, Subscript, Lambda, Compare,
+    # BoolOp, comprensiones, Str, List, Dict, Import, etc.) se rechaza.
+    raise UnsafeExpressionError(f"Elemento no permitido en la expresion: {type(node).__name__}")
+
+
 def format_number(n):
     if isinstance(n, float):
         n = round(n, 5)
@@ -25,10 +94,14 @@ def format_number(n):
     return str(n)
 
 def safe_eval(expr):
+    """Evalua una expresion aritmetica sin usar eval()/compile() sobre el
+    string. Se parsea a AST y se recorre validando cada nodo contra una
+    whitelist estricta antes de ejecutar ninguna operacion."""
     expr = expr.replace('^', '**')
     try:
-        return eval(expr, {"__builtins__": None}, functions | constants | {'abs': abs})
-    except Exception:
+        tree = ast.parse(expr, mode='eval')
+        return _eval_node(tree)
+    except (UnsafeExpressionError, SyntaxError, ZeroDivisionError, TypeError, ValueError, OverflowError, RecursionError):
         return None
 
 def simplify_expression(expr):
@@ -66,20 +139,32 @@ def simplify_expression(expr):
     resolve_simple(expr)
     return steps
 
-def log_steps(steps):
+def format_steps(steps):
+    """Formatea la lista de pasos con flechas, sin imprimir ni escribir nada."""
+    return '\n'.join(("↓ " if i != 0 else "") + step for i, step in enumerate(steps))
+
+
+def write_history(steps):
+    """Escribe los pasos en el historial en disco. No imprime nada.
+    El logging es best-effort: si falla la escritura (permisos, disco, etc.)
+    no debe interrumpir el calculo en curso."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    output = []
-    for i, step in enumerate(steps):
-        output.append(("↓ " if i != 0 else "") + step)
-    result = '\n'.join(output)
+    result = format_steps(steps)
+    try:
+        with open("history.txt", "a", encoding="utf-8") as f:
+            f.write(timestamp + "\n")
+            f.write(result + "\n\n")
+    except OSError:
+        pass
 
-    # Print to console
-    print(result)
 
-    # Save to history
-    with open("history.txt", "a", encoding="utf-8") as f:
-        f.write(timestamp+"\n")
-        f.write(result + "\n\n")
+def log_steps(steps):
+    """Uso pensado para el CLI standalone de este script (log=True en
+    solve_expression). Loguea a archivo Y imprime. Los modulos que usan
+    calculator.py como libreria (geometria, physics, math_console) deben
+    llamar con log=False y decidir ellos mismos si imprimen."""
+    write_history(steps)
+    print(format_steps(steps))
 
 def solve_expression(expression: str, log: bool = False):
     steps = simplify_expression(expression)

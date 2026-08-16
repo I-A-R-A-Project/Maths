@@ -1,13 +1,11 @@
-﻿import re
+import re
 import unicodedata
 from typing import Callable
 
-from sympy import Eq, solve
-from sympy.parsing.sympy_parser import parse_expr
-
+import equation
 import geometria
 import physics
-from calculator import solve_expression
+from calculator import format_steps, simplify_expression, solve_expression, write_history
 from common import analyze_notation, format_expression
 from polynomial_solver import (
     parse_polynomial_input,
@@ -42,8 +40,9 @@ Comandos aceptados (texto libre o formato directo):
    - 2 + 3*5
    - sqrt(81) + sin(pi/2)
 
-2) Ecuaciones / sistemas:
+2) Ecuaciones / sistemas (N ecuaciones, N variables):
    - x + y = 10; x - y = 2
+   - x + y + z = 6; x - y = 1; 2*x + z = 7
    - 2*x + 3 = 15
 
 3) Geometria:
@@ -69,33 +68,19 @@ Escribe 'salir' para terminar.
 
 
 def solve_system_or_equation(raw: str) -> None:
-    chunks = [part.strip() for part in raw.split(";") if part.strip()]
-    equations = []
+    equations = equation.parse_system(raw)
+    steps, solutions = equation.solve_system_step_by_step(equations)
 
-    for chunk in chunks:
-        if "=" in chunk:
-            left, right = chunk.split("=", 1)
-            equations.append(Eq(parse_expr(left.replace("^", "**")), parse_expr(right.replace("^", "**"))))
-        else:
-            expr = parse_expr(chunk.replace("^", "**"))
-            equations.append(Eq(expr, 0))
-
-    if not equations:
-        raise ValueError("No se encontraron ecuaciones validas.")
-
-    symbols = sorted({symbol for eq in equations for symbol in eq.free_symbols}, key=lambda item: item.name)
-    if not symbols:
-        raise ValueError("No hay variables para resolver.")
-
-    solutions = solve(equations, symbols, dict=True)
+    for step in steps:
+        print(step)
 
     if not solutions:
         print("No se encontro solucion.")
         return
 
     print("Solucion(es):")
-    for index, item in enumerate(solutions, 1):
-        parts = [f"{symbol} = {item.get(symbol)}" for symbol in symbols if symbol in item]
+    for index, sol in enumerate(solutions, 1):
+        parts = [f"{sym} = {sol.get(sym)}" for sym in sorted(sol, key=lambda s: s.name)]
         print(f"  {index}) " + ", ".join(parts))
 
 
@@ -153,7 +138,15 @@ def solve_geometry(normalized_text: str, raw_text: str) -> bool:
         return True
 
     args = [str(number) for number in numbers]
-    selected(shape, *args)
+
+    try:
+        outcome = selected(shape, *args)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return True
+
+    for step in outcome.steps:
+        print(step)
     return True
 
 
@@ -188,7 +181,18 @@ def solve_physics(normalized_text: str, raw_text: str) -> bool:
         return True
 
     args = [str(number) for number in numbers]
-    selected(*args)
+
+    try:
+        outcome = selected(*args)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return True
+    except TypeError:
+        print("Cantidad incorrecta de valores para esa operacion de fisica.")
+        return True
+
+    for step in outcome.steps:
+        print(step)
     return True
 
 
@@ -273,7 +277,11 @@ def solve_polynomial(normalized_text: str, raw_text: str) -> bool:
 
 
 def solve_expression_fallback(raw: str) -> None:
-    value = solve_expression(raw, log=True)
+    steps = simplify_expression(raw)
+    write_history(steps)
+    print(format_steps(steps))
+
+    value = solve_expression(raw, log=False)
     if value is None:
         print("No pude interpretar la entrada. Escribe 'ayuda' para ver ejemplos.")
         return
@@ -315,6 +323,8 @@ def main() -> None:
 
         try:
             route_query(user_input)
+        except ValueError as error:
+            print(f"Error: {error}")
         except Exception as error:
             print(f"Error al resolver: {error}")
 

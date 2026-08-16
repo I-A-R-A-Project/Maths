@@ -1,8 +1,38 @@
 import re
-from dataclasses import dataclass
-from typing import Dict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 from calculator import safe_eval
+
+
+@dataclass(frozen=True)
+class ComputationResult:
+    """Resultado estructurado de un calculo de dominio (geometria, fisica,
+    ecuaciones, etc). Las funciones de calculo devuelven esto en vez de
+    imprimir directamente; quien las llama (math_console.py, o el main()
+    de cada script para uso standalone) decide como y cuando mostrarlo."""
+
+    steps: List[str] = field(default_factory=list)
+    result: Any = None
+
+    @property
+    def formatted(self) -> str:
+        return "\n".join(self.steps)
+
+
+def to_floats(args, names: List[str]) -> List[float]:
+    """Valida que `args` tenga la cantidad esperada de valores numericos y
+    los convierte a float. Levanta ValueError con un mensaje claro en vez
+    de dejar que un IndexError/ValueError generico se propague sin contexto."""
+    if len(args) != len(names):
+        raise ValueError(
+            f"Se esperaban {len(names)} valor(es) ({', '.join(names)}), "
+            f"se recibieron {len(args)}."
+        )
+    try:
+        return [float(value) for value in args]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Todos los valores deben ser numericos: {list(args)}") from exc
 
 
 @dataclass(frozen=True)
