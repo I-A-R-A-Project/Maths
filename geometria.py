@@ -13,8 +13,9 @@ from datetime import datetime
 
 from calculator import simplify_expression
 from common import ComputationResult, to_floats
+from paths import maths_data_dir
 
-HISTORY_PATH = "history.txt"
+HISTORY_PATH = maths_data_dir() / "history.txt"
 
 
 # --------------------- Auxiliar: expresiones internas ---------------------

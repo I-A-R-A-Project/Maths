@@ -2,6 +2,7 @@ import ast
 import math
 import operator
 import re
+from paths import maths_data_dir
 import sys
 from datetime import datetime
 
@@ -151,7 +152,7 @@ def write_history(steps):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     result = format_steps(steps)
     try:
-        with open("history.txt", "a", encoding="utf-8") as f:
+        with open(maths_data_dir() / "history.txt", "a", encoding="utf-8") as f:
             f.write(timestamp + "\n")
             f.write(result + "\n\n")
     except OSError:

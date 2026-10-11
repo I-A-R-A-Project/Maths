@@ -50,7 +50,7 @@ python polynomial_solver.py "x**2 - 5*x + 6" roots
 
 ## Notas
 
-- Algunos modulos escriben historial en `history.txt`.
+- El historial se guarda en `%APPDATA%\\IARA\\Maths\\history.txt` en Windows.
 - `polynomial_solver.py plot` abre ventana grafica local.
 - La consola `math_console.py` prioriza texto libre en espanol/ingles y usa heuristicas por palabras clave.
 
